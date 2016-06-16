@@ -328,12 +328,16 @@ def get_recent_transactions(time_frame, show=False):
         log.debug('No transactions in the last ' + str(time_frame) + ' hours.')
     return xrows
 
+def Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit):
+      log_amounts = [logarithm(x) for x in all_amounts]
+      log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
+      correl = Correlation(log_amounts,log_earnings)
+      if correl > correl_max:
+        correl_max = correl
+        min_profit = C
+      return [correl_max, min_profit]
 
-
-
-
-
-def find_power_law(largest_mixdepth_size, sorted_mix_balance):
+def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     global min_profit
     global power_law
     global log_coefficient
@@ -352,7 +356,7 @@ def find_power_law(largest_mixdepth_size, sorted_mix_balance):
     empty_offer_level_count = 0
     transactions_per_unit_time = 0.0
     min_earned = 2000.0
-    correl_max = -1.0
+    correl_max = -99.9
     for offer in offer_levels:
         offer_level_count += 1
         if offer['starting_size'] > offer_highx:
@@ -389,14 +393,18 @@ def find_power_law(largest_mixdepth_size, sorted_mix_balance):
             transactions_per_unit_time += len(fit_txs)/time_frame
         else:
             empty_offer_level_count += 1
-    for C in range(int(min_earned)):
-      log_amounts = [logarithm(x) for x in all_amounts]
-      log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
-      correl = Correlation(log_amounts,log_earnings)
-      if correl > correl_max:
-        correl_max = correl
-        min_profit = C
-    C = min_profit
+    #Grid search to find best value of C.
+    start_C = 0
+    end_C = int(min_earned)
+    step_C = 2*(end_C-start_C)
+    while (step_C>1):
+      step_C = step_C/2+step_C%2
+      range_C = range(start_C, end_C, step_C)
+      for C in range_C:
+        [correl_max, min_profit] = Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit)
+      C = min_profit
+      start_C = C-step_C+1
+      end_C = C+step_C
     log_amounts = [logarithm(x) for x in all_amounts]
     log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
     [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings)
@@ -460,7 +468,7 @@ def Linear_Regression(X,Y):
 
 
 def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
-    find_power_law(largest_mixdepth_size, sorted_mix_balance)
+    Find_Power_Law(largest_mixdepth_size, sorted_mix_balance)
     offer_levels = randomize_offer_levels(largest_mixdepth_size)
     offer_lowx = max(offer_low, output_size_min)
     if offer_high:
