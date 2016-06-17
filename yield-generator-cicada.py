@@ -413,16 +413,11 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
             if tx['amount'] >= lower and tx['amount'] <= upper:
                 fit_txs.append(tx)
         amounts, earnings = [], []
-        size_avg, earn_avg, effective_rate = 0, 0, 0
         if fit_txs:
             amounts = [x['amount'] for x in fit_txs]
             earnings = [x['cjfee_earned'] for x in fit_txs]
             for x in fit_txs:
               min_earned = min(min_earned, x['cjfee_earned'])
-            size_avg = sum(amounts) / len(amounts)
-            earn_avg = sum(earnings) / len(earnings)
-            effective_rate = float('%.10f' %
-                      (sum(earnings) / float(sum(amounts))))
             all_amounts += amounts
             all_earnings += earnings
             transactions_per_unit_time += len(fit_txs)/time_frame
@@ -472,9 +467,17 @@ def stddev(X, mean_x=None, W=None):
   var=0
   if not mean_x:
     mean_x = mean(X, W)
-  for x in X:
+  if not W:
+    for x in X:
       x_norm = x-mean_x
       var+=x_norm*x_norm
+  else:
+    for i in range(L):
+      x=X[i]
+      w=W[i]
+      x_norm = x-mean_x
+      var+=x_norm*x_norm*w
+    var/=sum(W)
   return sqrt(var)
 
 def Utility(earnings, amounts, bitcoin_days_destroyed = []):
@@ -482,7 +485,6 @@ def Utility(earnings, amounts, bitcoin_days_destroyed = []):
     Per_Transaction_Weight = random.random()
     weights = L*[Per_Transaction_Weight]
     Weight_Log_Earnings = random.random()
-    Weight_Log_Earnings
     log_earnings = [log(x) for x in earnings]
     log_amounts = [log(x) for x in amounts]
     mean_log_earnings = mean(log_earnings)
@@ -610,7 +612,8 @@ def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
             earnings = [x['cjfee_earned'] for x in fit_txs]
             size_avg = sum(amounts) / len(amounts)
             earn_avg = sum(earnings) / len(earnings)
-            effective_rate = float('%.10f' %
+            if size_avg:
+              effective_rate = float('%.10f' %
                                    (sum(earnings) / float(sum(amounts))))  # /0?
         if isinstance(offer['price_increment'], int):
             tpi = offer['price_increment'] * len(fit_txs)
