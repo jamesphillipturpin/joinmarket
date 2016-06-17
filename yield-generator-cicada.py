@@ -426,7 +426,7 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     #weights = Utility(all_earnings, all_amounts)
     #Grid search to find best value of C.
     start_C = 0
-    end_C = mean(all_earnings)
+    end_C = int(mean(all_earnings))
     step_C = 2*(end_C-start_C)
     while (step_C>1):
       step_C = step_C/2+step_C%2
