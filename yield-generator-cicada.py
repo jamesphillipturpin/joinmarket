@@ -64,6 +64,13 @@ profit = min_profit
 power_law = 0.5
 stddev_power_law = 0.0
 
+"""
+# This gives a list of prime numbers from 2 to slightly above time_frame_ceiling
+# This is used later to make sampling procedures random/arbitary/noisy without 
+# introducing accidental resonance effects.
+# (No prime number can factor another prime number thus there is no resonance 
+# between time periods of two different prime numbers.)
+"""
 def compile_primes(time_frame_ceiling):
   list_primes = []
   prime_candidate=2
@@ -77,6 +84,11 @@ def compile_primes(time_frame_ceiling):
         prime_candidate+=1
   return list_primes
 
+"""
+# This creates offers based on the power law previously
+# found/assumed, that have stastical noise added to avoid
+# reverse engineering of transaction history based on offers.
+"""
 def randomize_offer_levels(largest_mixdepth_size):
  global time_frame_ceiling
  global min_profit
@@ -328,6 +340,9 @@ def get_recent_transactions(time_frame, show=False):
         log.debug('No transactions in the last ' + str(time_frame) + ' hours.')
     return xrows
 
+# This is just a subtroutine for Find_Power_Law(...) function
+# It finds the statistical correlation for a regression with
+# a given value of C without doing the full regression.
 def Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit):
       log_amounts = [logarithm(x) for x in all_amounts]
       log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
@@ -337,6 +352,21 @@ def Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit):
         min_profit = C
       return [correl_max, min_profit]
 
+"""
+# Assumes power law model,
+# earnings = A*pow(amount,B) + C
+# Subtract C from both sides and apply logarithm to get
+# log(earnings-C) = log(A)+B*log(amount)
+# Substitute
+# Y=log(earnings-C)
+# Intercept = log(A)
+# Slope = B
+# X=log(amount)
+# Thus Y=intercept+slope*X, which allows for linear regression
+# To find the power loaw
+# Finds C that will give best correlation
+# Then uses linear regression to find best fit.
+"""
 def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     global min_profit
     global power_law
@@ -420,10 +450,11 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     assert(power_law > 0.0)
     assert(C >= 0)
 
-
+# Returns statistical/arithmetic mean of elements in list X  
 def mean(X):
     return sum(X)/float(len(X))
 
+# Returns statistical correlation between elements in two lists.
 def Correlation(X,Y):
     mean_x = mean(X)
     mean_y = mean(Y)
@@ -442,6 +473,13 @@ def Correlation(X,Y):
     correl = Numerator/sqrt(SS_xx*SS_yy)
     return correl
 
+"""
+# Linear regression to determine best fit of form
+# Y[i] = slope*X[i]+intercept
+# Returns [slope, intercept, correlation,
+# uncertainty of slope, uncertainty of intercepe] in a list.
+# (Uncertainty is basically standard deviation in this case.)
+"""
 def Linear_Regression(X,Y):
     Numerator = 0.0
     SS_xx = 0.0
@@ -466,7 +504,8 @@ def Linear_Regression(X,Y):
     var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
     return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
 
-
+# Note this includes the Find_Power_Law(...) function and the 
+# randomize_offer_levels(...) function.
 def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
     Find_Power_Law(largest_mixdepth_size, sorted_mix_balance)
     offer_levels = randomize_offer_levels(largest_mixdepth_size)
