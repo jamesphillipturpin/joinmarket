@@ -441,8 +441,8 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
       start_C = min_profit-step_C+1
       end_C = min_profit+step_C
     C = min_profit
-    log_amounts = [logarithm(x) for x in amounts]
-    log_earnings = [logarithm(max(x-C,1)) for x in earnings]
+    log_amounts = [logarithm(x) for x in all_amounts]
+    log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
     [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings)
     assert(correl == correl_max)
     power_law = pl
