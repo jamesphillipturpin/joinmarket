@@ -422,7 +422,7 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
             size_avg = sum(amounts) / len(amounts)
             earn_avg = sum(earnings) / len(earnings)
             effective_rate = float('%.10f' %
-                      (sum(earnings) / float(sum(all_amounts))))
+                      (sum(earnings) / float(sum(amounts))))
             all_amounts += amounts
             all_earnings += earnings
             transactions_per_unit_time += len(fit_txs)/time_frame
