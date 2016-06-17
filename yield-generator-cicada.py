@@ -345,6 +345,9 @@ def get_recent_transactions(time_frame, show=False):
 # a given value of C without doing the full regression.
 def Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit):
       log_amounts = [logarithm(x) for x in all_amounts]
+      # Points where x<=C wouldn't be valid transactions under
+      # the power law corresponding to that value of C, so
+      # using log(1)=0 in that case seems OK.
       log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
       correl = Correlation(log_amounts,log_earnings)
       if correl > correl_max:
