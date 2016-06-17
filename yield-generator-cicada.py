@@ -343,12 +343,12 @@ def get_recent_transactions(time_frame, show=False):
 # This is just a subtroutine for Find_Power_Law(...) function
 # It finds the statistical correlation for a regression with
 # a given value of C without doing the full regression.
-def Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit):
-      log_amounts = [logarithm(x) for x in all_amounts]
+def Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit):
+      log_amounts = [logarithm(x) for x in amounts]
       # Points where x<=C wouldn't be valid transactions under
       # the power law corresponding to that value of C, so
       # using log(1)=0 in that case seems OK.
-      log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
+      log_earnings = [logarithm(max(x-C,1)) for x in earnings]
       correl = Correlation(log_amounts,log_earnings)
       if correl > correl_max:
         correl_max = correl
@@ -374,6 +374,8 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     global min_profit
     global power_law
     global log_coefficient
+    global correl
+    global correl_max
     offer_lowx = max(offer_low, output_size_min)
     if offer_high:
         offer_highx = min(offer_high, largest_mixdepth_size - output_size_min)
@@ -420,15 +422,16 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
             size_avg = sum(amounts) / len(amounts)
             earn_avg = sum(earnings) / len(earnings)
             effective_rate = float('%.10f' %
-                      (sum(earnings) / float(sum(amounts))))
+                      (sum(earnings) / float(sum(all_amounts))))
             all_amounts += amounts
             all_earnings += earnings
             transactions_per_unit_time += len(fit_txs)/time_frame
         else:
             empty_offer_level_count += 1
+    #weights = Utility(all_earnings, all_amounts)
     #Grid search to find best value of C.
     start_C = 0
-    end_C = int(min_earned)
+    end_C = mean(all_earnings)
     step_C = 2*(end_C-start_C)
     while (step_C>1):
       step_C = step_C/2+step_C%2
@@ -438,8 +441,8 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
       start_C = min_profit-step_C+1
       end_C = min_profit+step_C
     C = min_profit
-    log_amounts = [logarithm(x) for x in all_amounts]
-    log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
+    log_amounts = [logarithm(x) for x in amounts]
+    log_earnings = [logarithm(max(x-C,1)) for x in earnings]
     [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings)
     assert(correl == correl_max)
     power_law = pl
@@ -454,26 +457,71 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     assert(C >= 0)
 
 # Returns statistical/arithmetic mean of elements in list X  
-def mean(X):
-    return sum(X)/float(len(X))
+def mean(X,W=None):
+    if W:
+      L = len(X)
+      sum_wx=0
+      for i in range(L):
+        sum_wx+=W[i]*X[i]
+      return sum_wx/sum(W)
+    else:
+      return sum(X)/float(len(X))
+
+def stddev(X, mean_x=None, W=None):
+  L=len(X)
+  var=0
+  if not mean_x:
+    mean_x = mean(X, W)
+  for x in X:
+      x_norm = x-mean_x
+      var+=x_norm*x_norm
+  return sqrt(var)
+
+def Utility(earnings, amounts, bitcoin_days_destroyed = []):
+    L = len(earnings)
+    Per_Transaction_Weight = random.random()
+    weights = L*[Per_Transaction_Weight]
+    Weight_Log_Earnings = random.random()
+    Weight_Log_Earnings
+    log_earnings = [log(x) for x in earnings]
+    log_amounts = [log(x) for x in amounts]
+    mean_log_earnings = mean(log_earnings)
+    for i in range(L):
+      weights[i] += Weight_Log_Earnings * log_earnings[i]
+    return weights
+
 
 # Returns statistical correlation between elements in two lists.
-def Correlation(X,Y):
-    mean_x = mean(X)
-    mean_y = mean(Y)
-    Numerator = 0.0
+# With weights W
+def Correlation(X,Y,W=None):
+    L = len(X)
+    mean_x = mean(X,W)
+    mean_y = mean(Y,W)
+    covariance = 0.0
     SS_xx = 0.0
     SS_yy = 0.0
-    L = len(X)
-    for i in range(L):
-      x=X[i]
-      y=Y[i]
-      x_norm = (x-mean_x)
-      y_norm = (y-mean_y)
-      Numerator += x_norm * y_norm
-      SS_xx += x_norm * x_norm
-      SS_yy += y_norm * y_norm
-    correl = Numerator/sqrt(SS_xx*SS_yy)
+    if W:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        w=W[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        # Technically covariance is this divided by sum(W)
+        # But the sum(W)'s would cancel so we just drop them.
+        covariance += x_norm * y_norm * w 
+        SS_xx += x_norm * x_norm * w
+        SS_yy += y_norm * y_norm * w
+    else:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        covariance += x_norm * y_norm
+        SS_xx += x_norm * x_norm
+        SS_yy += y_norm * y_norm
+    correl = covariance/sqrt(SS_xx*SS_yy)
     return correl
 
 """
@@ -483,32 +531,49 @@ def Correlation(X,Y):
 # uncertainty of slope, uncertainty of intercepe] in a list.
 # (Uncertainty is basically standard deviation in this case.)
 """
-def Linear_Regression(X,Y):
-    Numerator = 0.0
+def Linear_Regression(X,Y,W=None):
+    Covariance  = 0.0
     SS_xx = 0.0
     SS_yy = 0.0
     L = len(X)
-    mean_x = mean(X)
-    mean_y = mean(Y)
-    for i in range(L):
-      x=X[i]
-      y=Y[i]
-      x_norm = (x-mean_x)
-      y_norm = (y-mean_y)
-      Numerator += x_norm * y_norm
-      SS_xx += x_norm * x_norm
-      SS_yy += y_norm * y_norm
-    slope = Numerator/SS_xx
-    intercept = mean_y-slope*mean_x
-    correl = Numerator/sqrt(SS_xx*SS_yy)
-    exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
-    var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
-    var_slope = var_y_given_x / SS_xx 
-    var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
-    return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
+    mean_x = mean(X,W)
+    mean_y = mean(Y,W)
+    if W:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        w=W[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        Covariance  += x_norm * y_norm * w
+        SS_xx += x_norm * x_norm * w
+        SS_yy += y_norm * y_norm * w
+      slope = Covariance /SS_xx
+      intercept = mean_y-slope*mean_x
+      correl = Covariance /sqrt(SS_xx*SS_yy)
+      exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
+      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_slope = var_y_given_x / SS_xx 
+      var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
+      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
+    else:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        Covariance  += x_norm * y_norm
+        SS_xx += x_norm * x_norm
+        SS_yy += y_norm * y_norm
+      slope = Covariance /SS_xx
+      intercept = mean_y-slope*mean_x
+      correl = Covariance /sqrt(SS_xx*SS_yy)
+      exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
+      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_slope = var_y_given_x / SS_xx 
+      var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
+      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
 
-# Note this includes the Find_Power_Law(...) function and the 
-# randomize_offer_levels(...) function.
 def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
     Find_Power_Law(largest_mixdepth_size, sorted_mix_balance)
     offer_levels = randomize_offer_levels(largest_mixdepth_size)
@@ -922,4 +987,3 @@ def main():
 if __name__ == "__main__":
     main()
     print('done')
-
