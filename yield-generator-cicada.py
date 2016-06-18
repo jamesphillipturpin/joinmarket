@@ -25,11 +25,10 @@ mix_levels = 5
 nickname = random_nick()
 nickserv_password = ''
 
-from math import sqrt, pow, ceil, floor, exp
-from math import log as logarithm
+import math
 import random
-PHI = (sqrt(5.0)+1.0)/2.0
-phi = (sqrt(5.0)-1.0)/2.0
+PHI = (math.sqrt(5.0)+1.0)/2.0
+phi = (math.sqrt(5.0)-1.0)/2.0
 
 def is_prime(n):
   if n == 2 or n == 3: return True
@@ -47,16 +46,16 @@ def is_prime(n):
 
 """
 # 24 hours per day, 29.530587981 days per synodic month.
-# The 2*PHI/logarithm(2) term is intended to make the
+# The 2*PHI/math.log(2) term is intended to make the
 # prime numbers average out to about two months, so time 
 # frames aren't biased towards being out-of-phas lunar effects.
 # You might change 29.530587981 to 365.24 if you use the same
 # wallet for much over a year.
 """
-time_frame_ceiling = int(24*29.530587981*2*PHI/logarithm(2))
+time_frame_ceiling = int(24*29.530587981*2*PHI/math.log(2))
 output_size_min = 2730 # Use dust limit
-min_profit = 1000 * pow(phi, random.random())
-log_coefficient = logarithm(min_profit)
+min_profit = 1000 * math.pow(phi, random.random())
+log_coefficient = math.log(min_profit)
 stddev_log_coefficient = 0
 standard_size = pow(10,8)
 output_size = output_size_min
@@ -74,7 +73,7 @@ stddev_power_law = 0.0
 def compile_primes(time_frame_ceiling):
   list_primes = []
   prime_candidate=2
-  adjusted_ceiling = int(time_frame_ceiling + logarithm(time_frame_ceiling))+1
+  adjusted_ceiling = int(time_frame_ceiling + math.log(time_frame_ceiling))+1
   for i in range(adjusted_ceiling):
     while (len(list_primes)<=i): 
       if is_prime(prime_candidate):
@@ -103,21 +102,21 @@ def randomize_offer_levels(largest_mixdepth_size):
  list_primes = compile_primes(time_frame_ceiling)
  list_types = ['absolute','relative']
  offer_levels = []
- number_of_levels = int(ceil(logarithm(output_size_max / output_size_min, PHI))) * 3
+ number_of_levels = int(math.ceil(math.log(output_size_max / output_size_min, PHI))) * 3
  output_size_next = output_size_min
  for level in range(number_of_levels):
   output_size = output_size_next
-  output_size_next=int(output_size*pow(PHI,random.random()/2.0+0.5))
+  output_size_next=int(output_size*math.pow(PHI,random.random()/2.0+0.5))
   ratio = output_size_next / output_size 
-  output_mean = sqrt(output_size*output_size_next)
-  guess_coefficient = exp(log_coefficient+ random.gauss(0.0,stddev_log_coefficient))
+  output_mean = math.sqrt(output_size*output_size_next)
+  guess_coefficient = math.exp(log_coefficient+ random.gauss(0.0,stddev_log_coefficient))
   guess_exponent = power_law + random.gauss(0.0,stddev_power_law)
-  profit=int(min_profit+guess_coefficient *pow(output_mean,guess_exponent))
+  profit=int(min_profit+guess_coefficient *math.pow(output_mean,guess_exponent))
   type_choice = random.choice(list_types)
   if type_choice == 'relative':
     profit = int(profit*pow(10,10)/output_mean)
   time_frame = 1.0*random.choice(list_primes)  
-  price_increment = pow(PHI,(24.0/time_frame)*(ratio/PHI))
+  price_increment = math.pow(PHI,(24.0/time_frame)*(ratio/PHI))
   offer_levels.append({'starting_size': float(output_size)/float(pow(10,8)), 'type':type_choice,'price_floor': profit,'price_increment': price_increment,'price_ceiling': None, 'time_frame': time_frame,})
  return offer_levels
 offer_levels = randomize_offer_levels(100*pow(10,8))
@@ -344,11 +343,11 @@ def get_recent_transactions(time_frame, show=False):
 # It finds the statistical correlation for a regression with
 # a given value of C without doing the full regression.
 def Compare_Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit, weights=[]):
-      log_amounts = [logarithm(x) for x in amounts]
+      log_amounts = [math.log(x) for x in amounts]
       # Points where x<=C wouldn't be valid transactions under
       # the power law corresponding to that value of C, so
       # using log(1)=0 in that case seems OK.
-      log_earnings = [logarithm(max(x-C,1)) for x in earnings]
+      log_earnings = [math.log(max(x-C,1)) for x in earnings]
       correl = Correlation(log_amounts,log_earnings,weights)
       if correl > correl_max:
         correl_max = correl
@@ -357,7 +356,7 @@ def Compare_Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit, 
 
 """
 # Assumes power law model,
-# earnings = A*pow(amount,B) + C
+# earnings = A*math.pow(amount,B) + C
 # Subtract C from both sides and apply logarithm to get
 # log(earnings-C) = log(A)+B*log(amount)
 # Substitute
@@ -436,8 +435,8 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
       start_C = min_profit-step_C+1
       end_C = min_profit+step_C
     C = min_profit
-    log_amounts = [logarithm(x) for x in all_amounts]
-    log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
+    log_amounts = [math.log(x) for x in all_amounts]
+    log_earnings = [math.log(max(x-C,1)) for x in all_earnings]
     [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings, weights)
     assert(correl == correl_max)
     power_law = pl
@@ -446,8 +445,8 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
     stddev_intercept = sd_ap
     offer_level_count -= excess_offer_level_count 
     offer_level_count -= empty_offer_level_count 
-    log_coefficient = intercept-logarithm(PHI)*transactions_per_unit_time/offer_level_count
-    stddev_log_coefficient = stddev_intercept-logarithm(PHI)*transactions_per_unit_time/offer_level_count
+    log_coefficient = intercept-math.log(PHI)*transactions_per_unit_time/offer_level_count
+    stddev_log_coefficient = stddev_intercept-math.log(PHI)*transactions_per_unit_time/offer_level_count
     assert(power_law > 0.0)
     assert(C >= 0)
 
@@ -478,7 +477,7 @@ def stddev(X, mean_x=None, W=None):
       x_norm = x-mean_x
       var+=x_norm*x_norm*w
     var/=sum(W)
-  return sqrt(var)
+  return math.sqrt(var)
 
 """
 # The utility function is intended to allow users to weight 
@@ -512,8 +511,8 @@ def Utility(earnings, amounts, bitcoin_days_destroyed = None):
     Weight_Log_Amounts = random.random()-Weight_Log_Earnings
     Weight_Log_Earnings += random.random()
     weights = L*[Per_Transaction_Weight]
-    log_earnings = [logarithm(x) for x in earnings]
-    log_amounts = [logarithm(x) for x in amounts]
+    log_earnings = [math.log(x) for x in earnings]
+    log_amounts = [math.log(x) for x in amounts]
     mean_log_earnings = mean(log_earnings)
     mean_log_amounts = mean(log_amounts)
     stddev_log_earnings = stddev(log_earnings, mean_log_earnings)
@@ -562,7 +561,7 @@ def Correlation(X,Y,W=None):
         covariance += x_norm * y_norm
         SS_xx += x_norm * x_norm
         SS_yy += y_norm * y_norm
-    correl = covariance/sqrt(SS_xx*SS_yy)
+    correl = covariance/math.sqrt(SS_xx*SS_yy)
     return correl
 
 """
@@ -591,12 +590,12 @@ def Linear_Regression(X,Y,W=None):
         SS_yy += y_norm * y_norm * w
       slope = Covariance /SS_xx
       intercept = mean_y-slope*mean_x
-      correl = Covariance /sqrt(SS_xx*SS_yy)
+      correl = Covariance /math.sqrt(SS_xx*SS_yy)
       exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
-      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_y_given_x = sum([math.pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
       var_slope = var_y_given_x / SS_xx 
       var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
-      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
+      return [slope, intercept, correl, math.sqrt(var_slope), math.sqrt(var_intercept)]
     else:
       for i in range(L):
         x=X[i]
@@ -608,12 +607,12 @@ def Linear_Regression(X,Y,W=None):
         SS_yy += y_norm * y_norm
       slope = Covariance /SS_xx
       intercept = mean_y-slope*mean_x
-      correl = Covariance /sqrt(SS_xx*SS_yy)
+      correl = Covariance /math.sqrt(SS_xx*SS_yy)
       exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
-      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_y_given_x = sum([math.pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
       var_slope = var_y_given_x / SS_xx 
       var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
-      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
+      return [slope, intercept, correl, math.sqrt(var_slope), math.sqrt(var_intercept)]
 
 def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
     Find_Power_Law(largest_mixdepth_size, sorted_mix_balance)
