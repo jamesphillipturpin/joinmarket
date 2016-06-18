@@ -488,35 +488,48 @@ def stddev(X, mean_x=None, W=None):
 # The idea is that we aren't sure whether we are trying
 # to get coinjoin fees by having lots of cheap transactions
 # or by keeping high prices - so we experiment.
-# We do wish to avoid linear weight with earnings as
-# that emphasizes high outliers and could create stagnation.
+# We do wish to avoid purely linear weight with earnings as
+# that emphasizes high outliers and could create stagnation,
+# so we could rely instead on log_earnings.
+# "amounts" or "log_amounts" probabbly could reasonably have 
+# negative weights since they imply reduced effective 
+# interest rate for given earnings, or positive to encourage 
+# movement between mix depths.
 # The calculation of bitcoin days destroyed is not
-# yet implemented.
+# yet implemented, so we must rely on amounts for now.
+# Although the idea here is to allow each user to cater 
+# Utility function to his preferences, the default random 
+# weights are intended to be fairly general purpose, to span
+# a range of reasonably likely preferences, from high number of
+# raw transactions to high earnings per transaction, from 
+# high earnings per amount (interest per transaction) to high
+# movement between mixed depths - and any mixture of those.
 """
 def Utility(earnings, amounts, bitcoin_days_destroyed = None):
     L = len(earnings)
     Per_Transaction_Weight = random.random()
     Weight_Log_Earnings = random.random()
-    #Weight_Log_Amounts = -random.random()
+    Weight_Log_Amounts = random.random()-Weight_Log_Earnings
+    Weight_Log_Earnings += random.random()
     weights = L*[Per_Transaction_Weight]
     log_earnings = [logarithm(x) for x in earnings]
-    #log_amounts = [logarithm(x) for x in amounts]
+    log_amounts = [logarithm(x) for x in amounts]
     mean_log_earnings = mean(log_earnings)
-    #mean_log_amounts = mean(log_amounts)
+    mean_log_amounts = mean(log_amounts)
     stddev_log_earnings = stddev(log_earnings, mean_log_earnings)
-    #stddev_log_amounts = stddev(log_amounts, mean_log_amounts)
-    norm_log_earnings = Normalize(log_earnings, mean_log_earnings, stddev_log_earnings)
-    #norm_log_amounts = Normalize(log_amounts, mean_log_amounts, stddev_log_amounts)
+    stddev_log_amounts = stddev(log_amounts, mean_log_amounts)
+    norm_log_earnings = Normalize(log_earnings, mean_log_earnings, stddev_log_earnings,1.0)
+    norm_log_amounts = Normalize(log_amounts, mean_log_amounts, stddev_log_amounts,1.0)
     for i in range(L):
       weights[i] += Weight_Log_Earnings * norm_log_earnings[i]
-      #weights[i] += Weight_Log_Amounts * norm_log_amounts[i]
+      weights[i] += Weight_Log_Amounts * norm_log_amounts[i]
     return weights
 
-def Normalize(X, mean_X, stddev_X):
+def Normalize(X, mean_X, stddev_X, offset = 0.0):
   L=len(X)
   result=[]
   for i in range(L):
-    result.append((X[i]-mean_X)/stddev_X)
+    result.append((X[i]-mean_X)/stddev_X+offset)
   return result
 
 # Returns statistical correlation between elements in two lists.
