@@ -343,13 +343,13 @@ def get_recent_transactions(time_frame, show=False):
 # This is just a subtroutine for Find_Power_Law(...) function
 # It finds the statistical correlation for a regression with
 # a given value of C without doing the full regression.
-def Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit):
+def Compare_Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit, weights=[]):
       log_amounts = [logarithm(x) for x in amounts]
       # Points where x<=C wouldn't be valid transactions under
       # the power law corresponding to that value of C, so
       # using log(1)=0 in that case seems OK.
       log_earnings = [logarithm(max(x-C,1)) for x in earnings]
-      correl = Correlation(log_amounts,log_earnings)
+      correl = Correlation(log_amounts,log_earnings,weights)
       if correl > correl_max:
         correl_max = correl
         min_profit = C
@@ -423,7 +423,7 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
             transactions_per_unit_time += len(fit_txs)/time_frame
         else:
             empty_offer_level_count += 1
-    #weights = Utility(all_earnings, all_amounts)
+    weights = Utility(all_earnings, all_amounts)
     #Grid search to find best value of C.
     start_C = 0
     end_C = int(mean(all_earnings))
@@ -432,13 +432,13 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
       step_C = step_C/2+step_C%2
       range_C = range(start_C, end_C, step_C)
       for C in range_C:
-        [correl_max, min_profit] = Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit)
+        [correl_max, min_profit] = Compare_Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit, weights)
       start_C = min_profit-step_C+1
       end_C = min_profit+step_C
     C = min_profit
     log_amounts = [logarithm(x) for x in all_amounts]
     log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
-    [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings)
+    [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings, weights)
     assert(correl == correl_max)
     power_law = pl
     intercept = ap
@@ -480,18 +480,44 @@ def stddev(X, mean_x=None, W=None):
     var/=sum(W)
   return sqrt(var)
 
-def Utility(earnings, amounts, bitcoin_days_destroyed = []):
+"""
+# The utility function is intended to allow users to weight 
+# data points in either specific or random manner.
+# In this case we pick a random "per transaction" weight
+# And a random "logarithm of earnings" weight.
+# The idea is that we aren't sure whether we are trying
+# to get coinjoin fees by having lots of cheap transactions
+# or by keeping high prices - so we experiment.
+# We do wish to avoid linear weight with earnings as
+# that emphasizes high outliers and could create stagnation.
+# The calculation of bitcoin days destroyed is not
+# yet implemented.
+"""
+def Utility(earnings, amounts, bitcoin_days_destroyed = None):
     L = len(earnings)
     Per_Transaction_Weight = random.random()
-    weights = L*[Per_Transaction_Weight]
     Weight_Log_Earnings = random.random()
-    log_earnings = [log(x) for x in earnings]
-    log_amounts = [log(x) for x in amounts]
+    #Weight_Log_Amounts = -random.random()
+    weights = L*[Per_Transaction_Weight]
+    log_earnings = [logarithm(x) for x in earnings]
+    #log_amounts = [logarithm(x) for x in amounts]
     mean_log_earnings = mean(log_earnings)
+    #mean_log_amounts = mean(log_amounts)
+    stddev_log_earnings = stddev(log_earnings, mean_log_earnings)
+    #stddev_log_amounts = stddev(log_amounts, mean_log_amounts)
+    norm_log_earnings = Normalize(log_earnings, mean_log_earnings, stddev_log_earnings)
+    #norm_log_amounts = Normalize(log_amounts, mean_log_amounts, stddev_log_amounts)
     for i in range(L):
-      weights[i] += Weight_Log_Earnings * log_earnings[i]
+      weights[i] += Weight_Log_Earnings * norm_log_earnings[i]
+      #weights[i] += Weight_Log_Amounts * norm_log_amounts[i]
     return weights
 
+def Normalize(X, mean_X, stddev_X):
+  L=len(X)
+  result=[]
+  for i in range(L):
+    result.append((X[i]-mean_X)/stddev_X)
+  return result
 
 # Returns statistical correlation between elements in two lists.
 # With weights W
