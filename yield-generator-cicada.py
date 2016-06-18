@@ -25,69 +25,102 @@ mix_levels = 5
 nickname = random_nick()
 nickserv_password = ''
 
-# EXPLANATION
-# It watches your own transaction volume, and raises or lowers prices based
-# on how many transactions you are getting.
-# Price ranges that arent getting used will stay cheap,
-# while frequently used price ranges will raise themselves in price.
-# 
-# CONFIGURATION
-# starting size: offer amount in btc
-# price floor: cjfee in satoshis
-# price increment: increase your cjfee by this much per tranaction 
-# time frame: Transaction count is within this window. This is how long it 
-#             takes to drop to the price floor if there have been no 
-#             transactions.  A short window is more aggressive at dropping
-#             fees, while a large window holds prices up longer. 
-# type: absolute or relative
+from math import sqrt, pow, ceil, floor, exp
+from math import log as logarithm
+import random
+PHI = (sqrt(5.0)+1.0)/2.0
+phi = (sqrt(5.0)-1.0)/2.0
 
-offer_levels = (
-    {'starting_size': 0,
-     'type': 'absolute',
-     'price_floor': 2000,
-     'price_increment': 1000,  # satoshis
-     'price_ceiling': None,
-     'time_frame': 7 * 24,
-    },
-    {'starting_size': 1,
-     'type': 'absolute',
-     'price_floor': 3000,
-     'price_increment': 1.25,  # 25%
-     'price_ceiling': None,
-     'time_frame': 7 * 24,
-    },
-    {'starting_size': 10,
-     'type': 'relative',
-     'price_floor': 5000,  # type is relative, so 0.00005000
-     'price_increment': 1.618,  # 61.8% is the fibonacci sequence/golden ratio
-     'price_ceiling': None,
-     'time_frame': 7 * 24,
-    },
-)
+def is_prime(n):
+  if n == 2 or n == 3: return True
+  if n < 2 or n%2 == 0: return False
+  if n < 9: return True
+  if n%3 == 0: return False
+  r = int(n**0.5)
+  f = 5
+  while f <= r:
+    #print '\t',f
+    if n%f == 0: return False
+    if n%(f+2) == 0: return False
+    f +=6
+  return True
 
-# Here are randomizers you can use in your offers.
-#'starting_size': random.uniform(0.9, 1),
-#'starting_size': random.uniform(9, 10),
-#'price_floor': random.randrange(1900, 2100),
-#'price_floor': int(1000 * random.uniform(0.9, 1.1)),
-#'price_increment': int(1000 * random.uniform(0.9, 1.1)),
-#'type': random.choice(['absolute','relative']),
-#'time_frame': random.randrange(6, 10) * 24,
-
-# tip: you can create a file called myoscoffers.py with your offer_levels in it.
-# tip: view your csv file in unix with 'column -s, -t < yigen-statement-myfile.csv'
-
-# optional, for use in your joinmarket.cfg
 """
-[YIELDGEN]
-# multiple values means set randomly within that range
-# offer low, default is output_size_min
-# offer high, default is largest mix depth
-# minimum output size, default is dust threshold 2730 satoshis
-offer_low = 25000, 65000
-offer_high = 10e8, 14e8  
-output_size_min = 10000
+# 24 hours per day, 29.530587981 days per synodic month.
+# The 2*PHI/logarithm(2) term is intended to make the
+# prime numbers average out to about two months, so time 
+# frames aren't biased towards being out-of-phas lunar effects.
+# You might change 29.530587981 to 365.24 if you use the same
+# wallet for much over a year.
 """
+time_frame_ceiling = int(24*29.530587981*2*PHI/logarithm(2))
+output_size_min = 2730 # Use dust limit
+min_profit = 1000 * pow(phi, random.random())
+log_coefficient = logarithm(min_profit)
+stddev_log_coefficient = 0
+standard_size = pow(10,8)
+output_size = output_size_min
+profit = min_profit
+power_law = 0.5
+stddev_power_law = 0.0
+
+"""
+# This gives a list of prime numbers from 2 to slightly above time_frame_ceiling
+# This is used later to make sampling procedures random/arbitary/noisy without 
+# introducing accidental resonance effects.
+# (No prime number can factor another prime number thus there is no resonance 
+# between time periods of two different prime numbers.)
+"""
+def compile_primes(time_frame_ceiling):
+  list_primes = []
+  prime_candidate=2
+  adjusted_ceiling = int(time_frame_ceiling + logarithm(time_frame_ceiling))+1
+  for i in range(adjusted_ceiling):
+    while (len(list_primes)<=i): 
+      if is_prime(prime_candidate):
+        list_primes.append(prime_candidate)
+        prime_candidate+=1
+      else:
+        prime_candidate+=1
+  return list_primes
+
+"""
+# This creates offers based on the power law previously
+# found/assumed, that have stastical noise added to avoid
+# reverse engineering of transaction history based on offers.
+"""
+def randomize_offer_levels(largest_mixdepth_size):
+ global time_frame_ceiling
+ global min_profit
+ global PHI
+ global list_primes
+ global time_frame_ceiling
+ global log_coefficient
+ global standard_size
+ global power_law
+ global output_size_max 
+ output_size_max = largest_mixdepth_size
+ list_primes = compile_primes(time_frame_ceiling)
+ list_types = ['absolute','relative']
+ offer_levels = []
+ number_of_levels = int(ceil(logarithm(output_size_max / output_size_min, PHI))) * 3
+ output_size_next = output_size_min
+ for level in range(number_of_levels):
+  output_size = output_size_next
+  output_size_next=int(output_size*pow(PHI,random.random()/2.0+0.5))
+  ratio = output_size_next / output_size 
+  output_mean = sqrt(output_size*output_size_next)
+  guess_coefficient = exp(log_coefficient+ random.gauss(0.0,stddev_log_coefficient))
+  guess_exponent = power_law + random.gauss(0.0,stddev_power_law)
+  profit=int(min_profit+guess_coefficient *pow(output_mean,guess_exponent))
+  type_choice = random.choice(list_types)
+  if type_choice == 'relative':
+    profit = int(profit*pow(10,10)/output_mean)
+  time_frame = 1.0*random.choice(list_primes)  
+  price_increment = pow(PHI,(24.0/time_frame)*(ratio/PHI))
+  offer_levels.append({'starting_size': float(output_size)/float(pow(10,8)), 'type':type_choice,'price_floor': profit,'price_increment': price_increment,'price_ceiling': None, 'time_frame': time_frame,})
+ return offer_levels
+offer_levels = randomize_offer_levels(100*pow(10,8))
 
 #END CONFIGURATION
 
@@ -145,15 +178,11 @@ except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
 # the above config parser code could be moved into a library for reuse
 
 log = get_log()
-log.debug("  ____           _ _ _       _             ")
-log.debug(" / __ \         (_) | |     | |            ")
-log.debug("| |  | |___  ___ _| | | __ _| |_ ___  _ __ ")
-log.debug("| |  | / __|/ __| | | |/ _` | __/ _ \| '__|")
-log.debug("| |__| \__ \ (__| | | | (_| | || (_) | |   ")
-log.debug(" \____/|___/\___|_|_|_|\__,_|\__\___/|_|   ")
-log.debug(random.choice(["     yield generator for the civilized",
-                         "     the best yield generator there is",
-                         "     oscillator oscillator up and down"]))
+log.debug(random.choice([
+"Yield Generator Cicada.",
+"An attempt to optimize Yield Generator Oscillator for",
+"profit, money velocity, and information leakage avoidance."
+]))
 if offer_low:
     log.debug('offer_low = ' + str(offer_low) + " (" + str(offer_low / 1e8) +
               " btc)")
@@ -165,7 +194,6 @@ else:
 if output_size_min != jm_single().DUST_THRESHOLD:
     log.debug('output_size_min = ' + str(output_size_min) + " (" + str(
         output_size_min / 1e8) + " btc)")
-
 
 def sanity_check(offers):
     for offer in offers:
@@ -191,9 +219,8 @@ def sanity_check(offers):
                              offer['minsize']) - offer['txfee']
             profit_max = int(float(offer['cjfee']) *
                              offer['maxsize']) - offer['txfee']
-            assert profit_min >= 0
-        assert profit_max >= 0
-
+            assert profit_min >= 1
+        assert profit_max >= 1
 
 def offer_data_chart(offers):
     has_rel = False
@@ -313,8 +340,284 @@ def get_recent_transactions(time_frame, show=False):
         log.debug('No transactions in the last ' + str(time_frame) + ' hours.')
     return xrows
 
+# This is just a subtroutine for Find_Power_Law(...) function
+# It finds the statistical correlation for a regression with
+# a given value of C without doing the full regression.
+def Compare_Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit, weights=[]):
+      log_amounts = [logarithm(x) for x in amounts]
+      # Points where x<=C wouldn't be valid transactions under
+      # the power law corresponding to that value of C, so
+      # using log(1)=0 in that case seems OK.
+      log_earnings = [logarithm(max(x-C,1)) for x in earnings]
+      correl = Correlation(log_amounts,log_earnings,weights)
+      if correl > correl_max:
+        correl_max = correl
+        min_profit = C
+      return [correl_max, min_profit]
+
+"""
+# Assumes power law model,
+# earnings = A*pow(amount,B) + C
+# Subtract C from both sides and apply logarithm to get
+# log(earnings-C) = log(A)+B*log(amount)
+# Substitute
+# Y=log(earnings-C)
+# Intercept = log(A)
+# Slope = B
+# X=log(amount)
+# Thus Y=intercept+slope*X, which allows for linear regression
+# To find the power loaw
+# Finds C that will give best correlation
+# Then uses linear regression to find best fit.
+"""
+def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
+    global min_profit
+    global power_law
+    global log_coefficient
+    global correl
+    global correl_max
+    offer_lowx = max(offer_low, output_size_min)
+    if offer_high:
+        offer_highx = min(offer_high, largest_mixdepth_size - output_size_min)
+    else:
+        offer_highx = largest_mixdepth_size - output_size_min
+    offers = []
+    display_lines = []
+    all_amounts = []
+    all_earnings = []
+    oid = 0
+    offer_level_count = 0
+    excess_offer_level_count = 0
+    empty_offer_level_count = 0
+    transactions_per_unit_time = 0.0
+    min_earned = 2000.0
+    correl_max = -99.9
+    for offer in offer_levels:
+        offer_level_count += 1
+        if offer['starting_size'] > offer_highx:
+            excess_offer_level_count +=1
+        lower = int(offer['starting_size'] * 1e8)
+        if lower < offer_lowx:
+            lower = offer_lowx
+        if offer_level_count <= len(offer_levels) - 1:
+            upper = int((offer_levels[offer_level_count]['starting_size'] * 1e8) - 1)
+            if upper > offer_highx:
+                upper = offer_highx
+        else:
+            upper = offer_highx
+        if lower > upper:
+            continue
+        fit_txs = []
+        time_frame = offer['time_frame']
+        for tx in get_recent_transactions(time_frame, show=False):
+            if tx['amount'] >= lower and tx['amount'] <= upper:
+                fit_txs.append(tx)
+        amounts, earnings = [], []
+        if fit_txs:
+            amounts = [x['amount'] for x in fit_txs]
+            earnings = [x['cjfee_earned'] for x in fit_txs]
+            for x in fit_txs:
+              min_earned = min(min_earned, x['cjfee_earned'])
+            all_amounts += amounts
+            all_earnings += earnings
+            transactions_per_unit_time += len(fit_txs)/time_frame
+        else:
+            empty_offer_level_count += 1
+    weights = Utility(all_earnings, all_amounts)
+    #Grid search to find best value of C.
+    start_C = 0
+    end_C = int(mean(all_earnings))
+    step_C = 2*(end_C-start_C)
+    while (step_C>1):
+      step_C = step_C/2+step_C%2
+      range_C = range(start_C, end_C, step_C)
+      for C in range_C:
+        [correl_max, min_profit] = Compare_Power_Law_Correlation(all_amounts, all_earnings, C, correl_max, min_profit, weights)
+      start_C = min_profit-step_C+1
+      end_C = min_profit+step_C
+    C = min_profit
+    log_amounts = [logarithm(x) for x in all_amounts]
+    log_earnings = [logarithm(max(x-C,1)) for x in all_earnings]
+    [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings, weights)
+    assert(correl == correl_max)
+    power_law = pl
+    intercept = ap
+    stddev_power_law = sd_pl
+    stddev_intercept = sd_ap
+    offer_level_count -= excess_offer_level_count 
+    offer_level_count -= empty_offer_level_count 
+    log_coefficient = intercept-logarithm(PHI)*transactions_per_unit_time/offer_level_count
+    stddev_log_coefficient = stddev_intercept-logarithm(PHI)*transactions_per_unit_time/offer_level_count
+    assert(power_law > 0.0)
+    assert(C >= 0)
+
+# Returns statistical/arithmetic mean of elements in list X  
+def mean(X,W=None):
+    if W:
+      L = len(X)
+      sum_wx=0
+      for i in range(L):
+        sum_wx+=W[i]*X[i]
+      return sum_wx/sum(W)
+    else:
+      return sum(X)/float(len(X))
+
+def stddev(X, mean_x=None, W=None):
+  L=len(X)
+  var=0
+  if not mean_x:
+    mean_x = mean(X, W)
+  if not W:
+    for x in X:
+      x_norm = x-mean_x
+      var+=x_norm*x_norm
+  else:
+    for i in range(L):
+      x=X[i]
+      w=W[i]
+      x_norm = x-mean_x
+      var+=x_norm*x_norm*w
+    var/=sum(W)
+  return sqrt(var)
+
+"""
+# The utility function is intended to allow users to weight 
+# data points in either specific or random manner.
+# In this case we pick a random "per transaction" weight
+# And a random "logarithm of earnings" weight.
+# The idea is that we aren't sure whether we are trying
+# to get coinjoin fees by having lots of cheap transactions
+# or by keeping high prices - so we experiment.
+# We do wish to avoid purely linear weight with earnings as
+# that emphasizes high outliers and could create stagnation,
+# so we could rely instead on log_earnings.
+# "amounts" or "log_amounts" probabbly could reasonably have 
+# negative weights since they imply reduced effective 
+# interest rate for given earnings, or positive to encourage 
+# movement between mix depths.
+# The calculation of bitcoin days destroyed is not
+# yet implemented, so we must rely on amounts for now.
+# Although the idea here is to allow each user to cater 
+# Utility function to his preferences, the default random 
+# weights are intended to be fairly general purpose, to span
+# a range of reasonably likely preferences, from high number of
+# raw transactions to high earnings per transaction, from 
+# high earnings per amount (interest per transaction) to high
+# movement between mixed depths - and any mixture of those.
+"""
+def Utility(earnings, amounts, bitcoin_days_destroyed = None):
+    L = len(earnings)
+    Per_Transaction_Weight = random.random()
+    Weight_Log_Earnings = random.random()
+    Weight_Log_Amounts = random.random()-Weight_Log_Earnings
+    Weight_Log_Earnings += random.random()
+    weights = L*[Per_Transaction_Weight]
+    log_earnings = [logarithm(x) for x in earnings]
+    log_amounts = [logarithm(x) for x in amounts]
+    mean_log_earnings = mean(log_earnings)
+    mean_log_amounts = mean(log_amounts)
+    stddev_log_earnings = stddev(log_earnings, mean_log_earnings)
+    stddev_log_amounts = stddev(log_amounts, mean_log_amounts)
+    norm_log_earnings = Normalize(log_earnings, mean_log_earnings, stddev_log_earnings,1.0)
+    norm_log_amounts = Normalize(log_amounts, mean_log_amounts, stddev_log_amounts,1.0)
+    for i in range(L):
+      weights[i] += Weight_Log_Earnings * norm_log_earnings[i]
+      weights[i] += Weight_Log_Amounts * norm_log_amounts[i]
+    return weights
+
+def Normalize(X, mean_X, stddev_X, offset = 0.0):
+  L=len(X)
+  result=[]
+  for i in range(L):
+    result.append((X[i]-mean_X)/stddev_X+offset)
+  return result
+
+# Returns statistical correlation between elements in two lists.
+# With weights W
+def Correlation(X,Y,W=None):
+    L = len(X)
+    mean_x = mean(X,W)
+    mean_y = mean(Y,W)
+    covariance = 0.0
+    SS_xx = 0.0
+    SS_yy = 0.0
+    if W:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        w=W[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        # Technically covariance is this divided by sum(W)
+        # But the sum(W)'s would cancel so we just drop them.
+        covariance += x_norm * y_norm * w 
+        SS_xx += x_norm * x_norm * w
+        SS_yy += y_norm * y_norm * w
+    else:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        covariance += x_norm * y_norm
+        SS_xx += x_norm * x_norm
+        SS_yy += y_norm * y_norm
+    correl = covariance/sqrt(SS_xx*SS_yy)
+    return correl
+
+"""
+# Linear regression to determine best fit of form
+# Y[i] = slope*X[i]+intercept
+# Returns [slope, intercept, correlation,
+# uncertainty of slope, uncertainty of intercepe] in a list.
+# (Uncertainty is basically standard deviation in this case.)
+"""
+def Linear_Regression(X,Y,W=None):
+    Covariance  = 0.0
+    SS_xx = 0.0
+    SS_yy = 0.0
+    L = len(X)
+    mean_x = mean(X,W)
+    mean_y = mean(Y,W)
+    if W:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        w=W[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        Covariance  += x_norm * y_norm * w
+        SS_xx += x_norm * x_norm * w
+        SS_yy += y_norm * y_norm * w
+      slope = Covariance /SS_xx
+      intercept = mean_y-slope*mean_x
+      correl = Covariance /sqrt(SS_xx*SS_yy)
+      exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
+      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_slope = var_y_given_x / SS_xx 
+      var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
+      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
+    else:
+      for i in range(L):
+        x=X[i]
+        y=Y[i]
+        x_norm = (x-mean_x)
+        y_norm = (y-mean_y)
+        Covariance  += x_norm * y_norm
+        SS_xx += x_norm * x_norm
+        SS_yy += y_norm * y_norm
+      slope = Covariance /SS_xx
+      intercept = mean_y-slope*mean_x
+      correl = Covariance /sqrt(SS_xx*SS_yy)
+      exp_y_x = [(slope*X[i]+intercept) for i in range(L)]
+      var_y_given_x = sum([pow(Y[i]-exp_y_x[i],2) for i in range(L)])/float(L-2)
+      var_slope = var_y_given_x / SS_xx 
+      var_intercept = var_slope * (1.0/L + mean_x*mean_x/SS_xx)
+      return [slope, intercept, correl, sqrt(var_slope), sqrt(var_intercept)]
 
 def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
+    Find_Power_Law(largest_mixdepth_size, sorted_mix_balance)
+    offer_levels = randomize_offer_levels(largest_mixdepth_size)
     offer_lowx = max(offer_low, output_size_min)
     if offer_high:
         offer_highx = min(offer_high, largest_mixdepth_size - output_size_min)
@@ -348,7 +651,8 @@ def create_oscillator_offers(largest_mixdepth_size, sorted_mix_balance):
             earnings = [x['cjfee_earned'] for x in fit_txs]
             size_avg = sum(amounts) / len(amounts)
             earn_avg = sum(earnings) / len(earnings)
-            effective_rate = float('%.10f' %
+            if size_avg:
+              effective_rate = float('%.10f' %
                                    (sum(earnings) / float(sum(amounts))))  # /0?
         if isinstance(offer['price_increment'], int):
             tpi = offer['price_increment'] * len(fit_txs)
@@ -459,11 +763,11 @@ class YieldGenerator(Maker, OrderbookWatch):
             return []
         offers = create_oscillator_offers(largest_mixdepth_size,
                                           sorted_mix_balance)
-        #log.debug('offer_data_chart = \n' + '\n'.join([str(
-        #    x) for x in offer_data_chart(offers)]))
+        log.debug('offer_data_chart = \n' + '\n'.join([str(
+            x) for x in offer_data_chart(offers)]))
         sanity_check(offers)
-        #log.debug('offers len = ' + str(len(offers)))
-        #log.debug('generated offers = \n' + '\n'.join([str(o) for o in offers]))
+        log.debug('offers len = ' + str(len(offers)))
+        log.debug('generated offers = \n' + '\n'.join([str(o) for o in offers]))
         return offers
 
     def oid_to_order(self, cjorder, oid, amount):
