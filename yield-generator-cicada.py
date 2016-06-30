@@ -102,11 +102,11 @@ def randomize_offer_levels(largest_mixdepth_size):
  list_primes = compile_primes(time_frame_ceiling)
  list_types = ['absolute','relative']
  offer_levels = []
- number_of_levels = int(math.ceil(math.log(output_size_max / output_size_min, PHI))) * 3
+ number_of_levels = int(math.ceil(math.log(output_size_max / output_size_min)))
  output_size_next = output_size_min
  for level in range(number_of_levels):
   output_size = output_size_next
-  output_size_next=int(output_size*math.pow(PHI,random.random()/2.0+0.5))
+  output_size_next= int(output_size*math.exp(math.exp(random.random())))
   ratio = output_size_next / output_size 
   output_mean = math.sqrt(output_size*output_size_next)
   guess_coefficient = math.exp(log_coefficient+ random.gauss(0.0,stddev_log_coefficient))
@@ -347,7 +347,7 @@ def Compare_Power_Law_Correlation(amounts, earnings, C, correl_max, min_profit, 
       # Points where x<=C wouldn't be valid transactions under
       # the power law corresponding to that value of C, so
       # using log(1)=0 in that case seems OK.
-      log_earnings = [math.log(max(x-C,1)) for x in earnings]
+      log_earnings = [math.log(max(abs(x-C),1)) for x in earnings]
       correl = Correlation(log_amounts,log_earnings,weights)
       if correl > correl_max:
         correl_max = correl
@@ -436,7 +436,7 @@ def Find_Power_Law(largest_mixdepth_size, sorted_mix_balance):
       end_C = min_profit+step_C
     C = min_profit
     log_amounts = [math.log(x) for x in all_amounts]
-    log_earnings = [math.log(max(x-C,1)) for x in all_earnings]
+    log_earnings = [math.log(max(abs(x-C),1)) for x in all_earnings]
     [pl,ap,correl,sd_pl,sd_ap]=Linear_Regression(log_amounts, log_earnings, weights)
     assert(correl == correl_max)
     power_law = pl
