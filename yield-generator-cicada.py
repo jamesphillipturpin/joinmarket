@@ -179,8 +179,8 @@ except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
 log = get_log()
 log.debug(random.choice([
 "Yield Generator Cicada.",
-"An attempt to optimize Yield Generator Oscillator for",
-"profit, money velocity, and information leakage avoidance."
+"An attempt to optimize Yield Generator Oscillator",
+"Maximize profit, money velocity, and information leakage avoidance."
 ]))
 if offer_low:
     log.debug('offer_low = ' + str(offer_low) + " (" + str(offer_low / 1e8) +
@@ -1028,3 +1028,4 @@ def main():
 if __name__ == "__main__":
     main()
     print('done')
+
