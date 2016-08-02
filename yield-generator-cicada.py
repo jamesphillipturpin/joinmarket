@@ -109,8 +109,22 @@ def randomize_offer_levels(largest_mixdepth_size):
   output_size_next= int(output_size*math.exp(math.exp(random.random())))
   ratio = output_size_next / output_size 
   output_mean = math.sqrt(output_size*output_size_next)
-  guess_coefficient = math.exp(log_coefficient+ random.gauss(0.0,stddev_log_coefficient))
-  guess_exponent = power_law + random.gauss(0.0,stddev_power_law)
+  """
+  # We add the sample noise back into our prices, 
+  # but only as discounts. The idea here is to explore prices 
+  # around the mean but capture market share by being willing 
+  # to do deeper sales than markups. Thus coinjoins are 
+  # usually 'on sale', sort of like alpacha socks.
+  """
+  dev_coeff = random.gauss(0,1)
+  dev_coeff = max(dev_coeff, -PHI)
+  dev_coeff = min(dev_coeff, phi)
+  dev_exp  = random.gauss(0,1)
+  dev_exp = max(dev_coeff, -PHI-dev_coeff )
+  dev_exp = min(dev_coeff, phi-dev_coeff )
+
+  guess_coefficient = math.exp(log_coefficient + dev_coeff * stddev_log_coefficient)
+  guess_exponent = power_law + dev_exp*stddev_power_law
   profit=int(min_profit+guess_coefficient *math.pow(output_mean,guess_exponent))
   type_choice = random.choice(list_types)
   if type_choice == 'relative':
@@ -484,16 +498,12 @@ def stddev(X, mean_x=None, W=None):
 # data points in either specific or random manner.
 # In this case we pick a random "per transaction" weight
 # And a random "logarithm of earnings" weight.
-# The idea is that we aren't sure whether we are trying
-# to get coinjoin fees by having lots of cheap transactions
-# or by keeping high prices - so we experiment.
+# The idea is that we may wish to weight high earnings or
+# high amount transactions more since that is where most
+# of our earnings come from.
 # We do wish to avoid purely linear weight with earnings as
 # that emphasizes high outliers and could create stagnation,
 # so we could rely instead on log_earnings.
-# "amounts" or "log_amounts" probabbly could reasonably have 
-# negative weights since they imply reduced effective 
-# interest rate for given earnings, or positive to encourage 
-# movement between mix depths.
 # The calculation of bitcoin days destroyed is not
 # yet implemented, so we must rely on amounts for now.
 # Although the idea here is to allow each user to cater 
@@ -504,12 +514,11 @@ def stddev(X, mean_x=None, W=None):
 # high earnings per amount (interest per transaction) to high
 # movement between mixed depths - and any mixture of those.
 """
-def Utility(earnings, amounts, bitcoin_days_destroyed = None):
+def Utility(earnings, amounts):
     L = len(earnings)
     Per_Transaction_Weight = random.random()
     Weight_Log_Earnings = random.random()
-    Weight_Log_Amounts = random.random()-Weight_Log_Earnings
-    Weight_Log_Earnings += random.random()
+    Weight_Log_Amounts = random.random()
     weights = L*[Per_Transaction_Weight]
     log_earnings = [math.log(x) for x in earnings]
     log_amounts = [math.log(x) for x in amounts]
@@ -1028,4 +1037,3 @@ def main():
 if __name__ == "__main__":
     main()
     print('done')
-
