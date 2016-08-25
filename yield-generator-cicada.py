@@ -53,7 +53,7 @@ def is_prime(n):
 # wallet for much over a year.
 """
 time_frame_ceiling = int(24*29.530587981*2*PHI/math.log(2))
-output_size_min = 2730 # Use dust limit
+output_size_min = jm_single().DUST_THRESHOLD # Use dust limit
 min_profit = 1000 * math.pow(phi, random.random())
 log_coefficient = math.log(min_profit)
 stddev_log_coefficient = 0
@@ -120,8 +120,8 @@ def randomize_offer_levels(largest_mixdepth_size):
   dev_coeff = max(dev_coeff, -PHI)
   dev_coeff = min(dev_coeff, phi)
   dev_exp  = random.gauss(0,1)
-  dev_exp = max(dev_coeff, -PHI-dev_coeff )
-  dev_exp = min(dev_coeff, phi-dev_coeff )
+  dev_exp = max(dev_exp, -PHI-dev_coeff )
+  dev_exp = min(dev_exp, phi-dev_coeff )
 
   guess_coefficient = math.exp(log_coefficient + dev_coeff * stddev_log_coefficient)
   guess_exponent = power_law + dev_exp*stddev_power_law
